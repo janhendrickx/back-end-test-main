@@ -1,4 +1,6 @@
 from django.core.management.base import BaseCommand
+# Enable atomic transactions
+from django.db import transaction
 from ...models import Vessel
 import threading
 
@@ -16,15 +18,21 @@ class Command(BaseCommand):
 
         def user1():
             barrier.wait()
-            vessel = Vessel.objects.get(id=1)
-            vessel.content -= 10.0
-            vessel.save()
+            # Wrap the atomic transaction
+            with transaction.atomic():
+                # Lock the row to prevent race conditions during concurrent updates
+                vessel = Vessel.objects.select_for_update().get(id=1)
+                vessel.content -= 10.0
+                vessel.save()
 
         def user2():
             barrier.wait()
-            vessel = Vessel.objects.get(id=1)
-            vessel.content -= 10.0
-            vessel.save()
+            # Wrap the atomic transaction
+            with transaction.atomic():
+                # Lock the row to prevent race conditions during concurrent updates
+                vessel = Vessel.objects.select_for_update().get(id=1)
+                vessel.content -= 10.0
+                vessel.save()
 
         t1 = threading.Thread(target=user1)
         t2 = threading.Thread(target=user2)
