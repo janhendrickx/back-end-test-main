@@ -24,34 +24,17 @@ class Command(BaseCommand):
         barrier = threading.Barrier(2)
         results = []  # Collect output messages
 
-        def withdraw(user_id):
-            # Wrap the atomic transaction
-            with transaction.atomic():
-                # Lock the row to prevent race conditions during concurrent updates
-                vessel = Vessel.objects.select_for_update().get(id=1)
-                if vessel.content >= MAX_WITHDRAWAL:
-                    vessel.content -= MAX_WITHDRAWAL
-                    vessel.save()
-                    return f"User {user_id}: Withdrawal successful."
-                else:
-                    if vessel.content > MAX_WITHDRAWAL:
-                        return f"User {user_id}: Withdrawal failed — only {vessel.content} kg available."
-                    elif vessel.content == 0:
-                        return f"User {user_id}: Withdrawal failed — Insufficient content"
-                        
-
-        def user1():
+        def user_thread(user_id):
             barrier.wait()
-            result = withdraw(1)
-            results.append(result)
+            try:
+                vessel = Vessel.objects.get(id=VESSEL_ID)
+                success, message = vessel.withdraw(MAX_WITHDRAWAL)
+            except Exception as e:
+                message = f"Error during withdrawal: {str(e)}"
+            results.append(f"User {user_id}: {message}")
 
-        def user2():
-            barrier.wait()
-            result = withdraw(2)
-            results.append(result)
-
-        t1 = threading.Thread(target=user1)
-        t2 = threading.Thread(target=user2)
+        t1 = threading.Thread(target=lambda: user_thread(1))
+        t2 = threading.Thread(target=lambda: user_thread(2))
         t1.start()
         t2.start()
         t1.join()
