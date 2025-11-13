@@ -1,6 +1,15 @@
 from django.core.management.base import BaseCommand
+# Enable atomic transactions
+from django.db import transaction
 from ...models import Vessel
 import threading
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+MAX_WITHDRAWAL = float(os.getenv("MAX_WITHDRAWAL", 10.0))
+VESSEL_ID = int(os.getenv("VESSEL_ID", 1))
 
 
 class Command(BaseCommand):
@@ -13,25 +22,32 @@ class Command(BaseCommand):
 
     def run_simulation(self):
         barrier = threading.Barrier(2)
+        results = []  # Collect output messages
 
-        def user1():
+        def user_thread(user_id):
             barrier.wait()
-            vessel = Vessel.objects.get(id=1)
-            vessel.content -= 10.0
-            vessel.save()
+            try:
+                vessel = Vessel.objects.get(id=VESSEL_ID)
+                success, message = vessel.withdraw(MAX_WITHDRAWAL)
+            except Exception as e:
+                message = f"Error during withdrawal: {str(e)}"
+            results.append(f"User {user_id}: {message}")
 
-        def user2():
-            barrier.wait()
-            vessel = Vessel.objects.get(id=1)
-            vessel.content -= 10.0
-            vessel.save()
-
-        t1 = threading.Thread(target=user1)
-        t2 = threading.Thread(target=user2)
+        t1 = threading.Thread(target=lambda: user_thread(1))
+        t2 = threading.Thread(target=lambda: user_thread(2))
         t1.start()
         t2.start()
         t1.join()
         t2.join()
 
+        # Print results from both threads
+        for message in results:
+            print(message)
+
+        # Show final vessel content
         vessel = Vessel.objects.get(id=1)
-        self.stdout.write(f"Remaining content: {vessel.content} kg")
+        if vessel.content < 1:
+            self.stdout.write(f"No more content remaining")
+        else:
+            self.stdout.write(f"Remaining content: {vessel.content} kg")
+        
