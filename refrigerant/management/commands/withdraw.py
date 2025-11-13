@@ -3,6 +3,13 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from ...models import Vessel
 import threading
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+MAX_WITHDRAWAL = float(os.getenv("MAX_WITHDRAWAL", 10.0))
+VESSEL_ID = int(os.getenv("VESSEL_ID", 1))
 
 
 class Command(BaseCommand):
@@ -22,12 +29,16 @@ class Command(BaseCommand):
             with transaction.atomic():
                 # Lock the row to prevent race conditions during concurrent updates
                 vessel = Vessel.objects.select_for_update().get(id=1)
-                if vessel.content >= 10.0:
-                    vessel.content -= 10.0
+                if vessel.content >= MAX_WITHDRAWAL:
+                    vessel.content -= MAX_WITHDRAWAL
                     vessel.save()
                     return f"User {user_id}: Withdrawal successful."
                 else:
-                    return f"User {user_id}: Withdrawal failed — insufficient content."
+                    if vessel.content > MAX_WITHDRAWAL:
+                        return f"User {user_id}: Withdrawal failed — only {vessel.content} kg available."
+                    elif vessel.content == 0:
+                        return f"User {user_id}: Withdrawal failed — Insufficient content"
+                        
 
         def user1():
             barrier.wait()
@@ -52,5 +63,8 @@ class Command(BaseCommand):
 
         # Show final vessel content
         vessel = Vessel.objects.get(id=1)
-        self.stdout.write(f"Remaining content: {vessel.content} kg")
+        if vessel.content < 1:
+            self.stdout.write(f"No more content remaining")
+        else:
+            self.stdout.write(f"Remaining content: {vessel.content} kg")
         
